@@ -395,7 +395,7 @@ fn main() -> Result<()> {
     terminal.show_cursor().unwrap();
 
     if let Err(err) = res {
-        println!("Error: {:?}", err);
+        println!("Error: {err:?}");
     }
     Ok(())
 }
@@ -747,31 +747,30 @@ fn draw_campaign_dashboard(f: &mut Frame, app: &App) {
                 .as_ref()
                 .unwrap()
                 .target_exit_price
-                .map(|p| format!("${:.2}", p))
+                .map(|p| format!("${p:.2}"))
                 .unwrap_or_else(|| "N/A".to_string())
         ))]),
         Line::from(vec![Span::raw(format!(
-            "Total Credits: ${:.2}",
-            total_credits
+            "Total Credits: ${total_credits:.2}"
         ))]),
         Line::from(vec![
             Span::raw("Running P/L: "),
             Span::styled(
-                format!("${:.2}", running_profit_loss),
+                format!("${running_profit_loss:.2}"),
                 Style::default().fg(pl_color).add_modifier(Modifier::BOLD),
             ),
         ]),
         Line::from(vec![Span::raw(format!(
             "Break Even: {}",
             break_even
-                .map(|be| format!("${:.2}", be))
+                .map(|be| format!("${be:.2}"))
                 .unwrap_or_else(|| "N/A".to_string())
         ))]),
-        Line::from(vec![Span::raw(format!("Weeks Running: {}", weeks_running))]),
+        Line::from(vec![Span::raw(format!("Weeks Running: {weeks_running}"))]),
         Line::from(vec![Span::raw(format!(
             "Profit per Week: {}",
             profit_per_week
-                .map(|ppw| format!("${:.2}", ppw))
+                .map(|ppw| format!("${ppw:.2}"))
                 .unwrap_or_else(|| "N/A".to_string())
         ))]),
     ];
@@ -873,7 +872,7 @@ fn draw_view_trades(f: &mut Frame, app: &App) {
                     Cell::from(t.date_of_action.to_string()),
                     Cell::from(t.number_of_shares.to_string()),
                     Cell::from(t.credit.to_string()),
-                    Cell::from(format!("{:.2}", pl)).style(Style::default().fg(pl_color)),
+                    Cell::from(format!("{pl:.2}")).style(Style::default().fg(pl_color)),
                 ])
             }),
     );
