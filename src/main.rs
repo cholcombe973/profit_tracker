@@ -108,9 +108,11 @@ impl OptionTrade {
 
 #[derive(Debug, Clone)]
 struct Campaign {
+    #[allow(unused)]
     id: i32,
     name: String,
     symbol: String,
+    #[allow(unused)]
     created_at: String,
     target_exit_price: Option<f64>,
 }
@@ -141,6 +143,7 @@ impl Campaign {
 }
 
 enum AppScreen {
+    #[allow(unused)]
     MainMenu,
     CampaignSelect,
     NewCampaign,
@@ -627,7 +630,7 @@ fn draw_add_trade(f: &mut Frame, app: &App) {
         "Action", "Strike", "Delta", "Expiration (YYYY-MM-DD)", "Date of Action (YYYY-MM-DD)", "Shares", "Credit"
     ];
     let items: Vec<ListItem> = fields.iter().enumerate().map(|(i, label)| {
-        let mut content = if i == 0 {
+        let content = if i == 0 {
             format!("{}: < {} >", label, ACTIONS[app.action_index])
         } else {
             let idx = i - 1;
