@@ -117,7 +117,10 @@ impl App {
         self.form_fields[3] = OffsetDateTime::now_local().unwrap().date().to_string();
     }
     pub fn reload_trades(&mut self) {
-        self.trades = OptionTrade::get_all(&self.db_conn).unwrap_or_default();
+        let mut trades = OptionTrade::get_all(&self.db_conn).unwrap_or_default();
+        // Sort trades by expiration date (earliest first), then by date of action
+        trades.sort_by(|a, b| a.expiration_date.cmp(&b.expiration_date));
+        self.trades = trades;
     }
     pub fn reload_campaigns(&mut self) {
         self.campaigns = Campaign::get_all(&self.db_conn);

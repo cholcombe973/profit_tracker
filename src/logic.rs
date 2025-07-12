@@ -139,3 +139,42 @@ pub fn calculate_total_premium_sold(trades: &[OptionTrade]) -> f64 {
     }
     total_net_premium
 }
+
+pub fn calculate_weekly_premium(trades: &[OptionTrade]) -> f64 {
+    // Get this Friday's date
+    let now = OffsetDateTime::now_local().unwrap();
+    let today = now.date();
+
+    // Calculate days until Friday (5 = Friday in ISO weekday)
+    let current_weekday = today.weekday().number_from_monday();
+    let days_until_friday = if current_weekday <= 5 {
+        // If today is Monday (1) through Friday (5), calculate days until Friday
+        5 - current_weekday
+    } else {
+        // If today is Saturday (6) or Sunday (7), calculate days until next Friday
+        5 + (7 - current_weekday)
+    };
+
+    let friday_date = if days_until_friday == 0 {
+        today // Today is Friday
+    } else {
+        today + time::Duration::days(days_until_friday as i64)
+    };
+
+    // Filter trades that expire this Friday and are sell actions
+    let weekly_trades: Vec<&OptionTrade> = trades
+        .iter()
+        .filter(|t| {
+            t.expiration_date == friday_date
+                && matches!(t.action, Action::SellPut | Action::SellCall)
+        })
+        .collect();
+
+    // Calculate total premium from selling options this week
+    weekly_trades
+        .iter()
+        .map(|t| t.credit * t.number_of_shares as f64)
+        .sum()
+}
+
+

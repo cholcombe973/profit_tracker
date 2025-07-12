@@ -29,13 +29,22 @@ pub fn draw_view_trades(f: &mut Frame, app: &App) {
             .add_modifier(Modifier::BOLD),
     );
     let mut rows: Vec<Row> = vec![header];
+    // Filter and sort trades for current campaign
+    let mut campaign_trades: Vec<&crate::models::OptionTrade> = app
+        .trades
+        .iter()
+        .filter(|t| {
+            t.campaign == app.selected_campaign.as_ref().unwrap().name
+                && t.symbol == app.selected_campaign.as_ref().unwrap().symbol
+        })
+        .collect();
+
+    // Sort by expiration date (earliest first)
+    campaign_trades.sort_by(|a, b| a.expiration_date.cmp(&b.expiration_date));
+
     rows.extend(
-        app.trades
+        campaign_trades
             .iter()
-            .filter(|t| {
-                t.campaign == app.selected_campaign.as_ref().unwrap().name
-                    && t.symbol == app.selected_campaign.as_ref().unwrap().symbol
-            })
             .skip(app.table_scroll)
             .take((size.height as usize).saturating_sub(3))
             .map(|t| {

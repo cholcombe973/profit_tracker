@@ -1,5 +1,5 @@
 use crate::app::App;
-use crate::logic::calculate_campaign_summary;
+use crate::logic::{calculate_campaign_summary, calculate_weekly_premium};
 use ratatui::{
     prelude::*,
     style::{Color, Modifier, Style},
@@ -36,6 +36,20 @@ pub fn draw_campaign_dashboard(f: &mut Frame, app: &App) {
             &campaign_trades,
             app.selected_campaign.as_ref().unwrap().target_exit_price,
         );
+
+    // Calculate weekly premium for this campaign
+    let campaign_trades_vec: Vec<crate::models::OptionTrade> = app
+        .trades
+        .iter()
+        .filter(|t| {
+            t.campaign == app.selected_campaign.as_ref().unwrap().name
+                && t.symbol == app.selected_campaign.as_ref().unwrap().symbol
+        })
+        .cloned()
+        .collect();
+
+    let weekly_premium = calculate_weekly_premium(&campaign_trades_vec);
+
     let pl_color = if running_profit_loss >= 0.0 {
         Color::Green
     } else {
@@ -79,6 +93,12 @@ pub fn draw_campaign_dashboard(f: &mut Frame, app: &App) {
                 .map(|ppw| format!("${ppw:.2}"))
                 .unwrap_or_else(|| "N/A".to_string())
         ))]),
+        Line::from(vec![Span::styled(
+            format!("This Week's Premium: ${weekly_premium:.2}"),
+            Style::default()
+                .fg(Color::Yellow)
+                .add_modifier(Modifier::BOLD),
+        )]),
     ];
     let para = Paragraph::new(summary_lines)
         .block(block)
