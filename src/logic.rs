@@ -176,5 +176,3 @@ pub fn calculate_weekly_premium(trades: &[OptionTrade]) -> f64 {
         .map(|t| t.credit * t.number_of_shares as f64)
         .sum()
 }
-
-
