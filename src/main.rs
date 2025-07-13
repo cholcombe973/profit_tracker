@@ -15,6 +15,7 @@ use csv_processor::{Broker, CsvProcessor};
 use models::{Campaign, OptionTrade};
 use ratatui::prelude::*;
 use std::io::{self, Stdout};
+use std::path::PathBuf;
 use time::Date;
 
 #[derive(Parser)]
@@ -34,7 +35,7 @@ enum Commands {
 
         /// Path to the CSV file
         #[arg(short, long)]
-        file: String,
+        file: PathBuf,
 
         /// Campaign name for the imported trades
         #[arg(short, long)]
@@ -57,7 +58,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
             symbol,
         }) => {
             // Handle CSV import
-            import_csv(&broker, &file, &campaign, &symbol)?;
+            import_csv(&broker, file, &campaign, &symbol)?;
         }
         None => {
             // Run the normal TUI application
@@ -70,7 +71,7 @@ fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
 
 fn import_csv(
     broker_str: &str,
-    file_path: &str,
+    file_path: PathBuf,
     campaign_name: &str,
     symbol: &str,
 ) -> Result<(), Box<dyn std::error::Error>> {
@@ -81,7 +82,7 @@ fn import_csv(
     let processor = CsvProcessor::new(broker);
 
     // Process CSV file
-    let trades = processor.process_csv(file_path)?;
+    let trades = processor.process_csv(&file_path)?;
 
     if trades.is_empty() {
         println!("No valid trades found in CSV file");
@@ -135,7 +136,11 @@ fn import_csv(
     }
 
     println!(
-        "Successfully imported {imported_count} trades from {file_path} for campaign '{campaign_name}' ({symbol})"
+        "Successfully imported {} trades from {} for campaign '{}' ({})",
+        imported_count,
+        file_path.display(),
+        campaign_name,
+        symbol
     );
 
     Ok(())

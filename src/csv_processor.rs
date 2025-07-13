@@ -1,6 +1,7 @@
 use crate::models::{Action, OptionTrade};
 use csv::Reader;
 use std::fs::File;
+use std::path::Path;
 use time::{Date, OffsetDateTime};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,9 +57,9 @@ impl CsvProcessor {
         Self { broker }
     }
 
-    pub fn process_csv(
+    pub fn process_csv<P: AsRef<Path>>(
         &self,
-        file_path: &str,
+        file_path: P,
     ) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
         let file = File::open(file_path)?;
         let reader = Reader::from_reader(file);
