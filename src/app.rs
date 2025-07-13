@@ -1,8 +1,8 @@
+use crate::db;
 use crate::models::{Action, Campaign, OptionTrade};
 use ratatui::widgets::ListState;
 use rusqlite::Connection;
 use time::OffsetDateTime;
-use crate::db;
 
 pub enum AppScreen {
     #[allow(unused)]

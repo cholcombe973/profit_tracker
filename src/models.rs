@@ -101,8 +101,9 @@ impl OptionTrade {
     }
 
     pub fn exists_in_db(&self, conn: &Connection) -> bool {
-        let mut stmt = conn.prepare(
-            "SELECT 1 FROM option_trades WHERE \
+        let mut stmt = conn
+            .prepare(
+                "SELECT 1 FROM option_trades WHERE \
                 symbol = ?1 AND \
                 campaign = ?2 AND \
                 action = ?3 AND \
@@ -111,8 +112,9 @@ impl OptionTrade {
                 expiration_date = ?6 AND \
                 date_of_action = ?7 AND \
                 number_of_shares = ?8 AND \
-                credit = ?9 LIMIT 1"
-        ).unwrap();
+                credit = ?9 LIMIT 1",
+            )
+            .unwrap();
         stmt.exists(params![
             self.symbol,
             self.campaign,
@@ -123,7 +125,8 @@ impl OptionTrade {
             self.date_of_action.to_string(),
             self.number_of_shares,
             self.credit,
-        ]).unwrap_or(false)
+        ])
+        .unwrap_or(false)
     }
 }
 

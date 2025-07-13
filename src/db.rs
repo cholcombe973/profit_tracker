@@ -31,4 +31,4 @@ pub fn init_database(conn: &Connection) -> Result<(), rusqlite::Error> {
     )?;
 
     Ok(())
-} 
+}

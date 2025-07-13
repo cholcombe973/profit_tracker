@@ -75,14 +75,16 @@ impl CsvProcessor {
         mut reader: Reader<File>,
     ) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
         let mut trades = Vec::new();
-        let date_fmt = time::macros::format_description!("[month]/[day]/[year] [hour]:[minute]:[second] [period]");
-        
+        let date_fmt = time::macros::format_description!(
+            "[month]/[day]/[year] [hour]:[minute]:[second] [period]"
+        );
+
         for result in reader.records() {
             let record = match result {
                 Ok(r) if r.len() >= 8 => r,
                 _ => continue,
             };
-            
+
             let date_str = record[0].trim_matches('"').trim();
             let type_str = record[1].trim_matches('"').trim();
             let description = record[4].trim_matches('"').trim();
@@ -100,7 +102,7 @@ impl CsvProcessor {
             // Split description on spaces to extract option trade details
             // Format: "15 Put NVTS 07/03/25 6.500 @ $0.18"
             let parts: Vec<&str> = description.split_whitespace().collect();
-            
+
             // Only process if we have enough parts and it looks like an option trade
             if parts.len() >= 6 && (parts[1] == "Put" || parts[1] == "Call") {
                 let qty: i32 = parts[0].parse().unwrap_or(0);
@@ -121,13 +123,21 @@ impl CsvProcessor {
                     let month: u8 = exp_parts[0].parse().unwrap_or(1);
                     let day: u8 = exp_parts[1].parse().unwrap_or(1);
                     let year: u16 = exp_parts[2].parse().unwrap_or(0);
-                    let year = if year < 100 { 2000 + year as i32 } else { year as i32 };
-                    Date::from_calendar_date(year, time::Month::try_from(month).unwrap_or(time::Month::January), day)
-                        .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date())
+                    let year = if year < 100 {
+                        2000 + year as i32
+                    } else {
+                        year as i32
+                    };
+                    Date::from_calendar_date(
+                        year,
+                        time::Month::try_from(month).unwrap_or(time::Month::January),
+                        day,
+                    )
+                    .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date())
                 } else {
                     OffsetDateTime::now_local().unwrap().date()
                 };
-                
+
                 // Parse date of action
                 let date_of_action = Date::parse(date_str, &date_fmt)
                     .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
@@ -263,61 +273,67 @@ mod tests {
     fn test_process_etrade_csv() {
         let processor = CsvProcessor::new(Broker::ETrade);
         let result = processor.process_csv("tests/etrade.csv");
-        
+
         assert!(result.is_ok(), "Failed to process CSV: {:?}", result.err());
-        
+
         let trades = result.unwrap();
         assert!(!trades.is_empty(), "No trades were parsed from the CSV");
-        
+
         // Test specific trades from the CSV
-        let put_trades: Vec<_> = trades.iter()
+        let put_trades: Vec<_> = trades
+            .iter()
             .filter(|t| t.symbol == "NVTS" && t.action == Action::SellPut)
             .collect();
-        
+
         assert!(!put_trades.is_empty(), "No NVTS Put trades found");
-        
+
         // Check that we have the expected trade from the first line
-        let nvts_trade = put_trades.iter()
+        let nvts_trade = put_trades
+            .iter()
             .find(|t| t.strike == 6.5 && t.number_of_shares == 1500)
             .expect("Expected NVTS Put trade with strike 6.5 and 1500 shares");
-        
+
         assert_eq!(nvts_trade.symbol, "NVTS");
         assert_eq!(nvts_trade.action, Action::SellPut);
         assert_eq!(nvts_trade.strike, 6.5);
         assert_eq!(nvts_trade.number_of_shares, 1500);
-        assert_eq!(nvts_trade.expiration_date, date!(2025-07-03));
-        
+        assert_eq!(nvts_trade.expiration_date, date!(2025 - 07 - 03));
+
         // Test RKLB trades
-        let rklb_trades: Vec<_> = trades.iter()
-            .filter(|t| t.symbol == "RKLB")
-            .collect();
-        
+        let rklb_trades: Vec<_> = trades.iter().filter(|t| t.symbol == "RKLB").collect();
+
         assert!(!rklb_trades.is_empty(), "No RKLB trades found");
-        
+
         // Test HOOD trades
-        let hood_trades: Vec<_> = trades.iter()
-            .filter(|t| t.symbol == "HOOD")
-            .collect();
-        
+        let hood_trades: Vec<_> = trades.iter().filter(|t| t.symbol == "HOOD").collect();
+
         assert!(!hood_trades.is_empty(), "No HOOD trades found");
-        
+
         // Verify that non-option entries are filtered out
-        let non_option_trades: Vec<_> = trades.iter()
+        let non_option_trades: Vec<_> = trades
+            .iter()
             .filter(|t| t.symbol == "TSLA") // TSLA trades in CSV are stock trades, not options
             .collect();
-        
-        assert!(non_option_trades.is_empty(), "Stock trades should be filtered out");
-        
-        println!("Successfully parsed {} option trades from E*TRADE CSV", trades.len());
-        
+
+        assert!(
+            non_option_trades.is_empty(),
+            "Stock trades should be filtered out"
+        );
+
+        println!(
+            "Successfully parsed {} option trades from E*TRADE CSV",
+            trades.len()
+        );
+
         // Print some sample trades for debugging
         for (i, trade) in trades.iter().take(5).enumerate() {
-            println!("Trade {}: {} {} @ ${:.2} exp: {} shares: {} credit: ${:.2}", 
-                i + 1, 
-                trade.symbol, 
+            println!(
+                "Trade {}: {} {} @ ${:.2} exp: {} shares: {} credit: ${:.2}",
+                i + 1,
+                trade.symbol,
                 match trade.action {
                     Action::BuyPut => "BuyPut",
-                    Action::SellPut => "SellPut", 
+                    Action::SellPut => "SellPut",
                     Action::BuyCall => "BuyCall",
                     Action::SellCall => "SellCall",
                     Action::Exercised => "Exercised",
@@ -330,6 +346,4 @@ mod tests {
             );
         }
     }
-
-
 }

@@ -107,10 +107,8 @@ fn import_csv(
         trade.symbol = symbol.to_string();
 
         // Skip duplicates
-        if !trade.exists_in_db(&db_conn) {
-            if trade.insert(&db_conn).is_ok() {
-                imported_count += 1;
-            }
+        if !trade.exists_in_db(&db_conn) && trade.insert(&db_conn).is_ok() {
+            imported_count += 1;
         }
     }
 
