@@ -74,59 +74,78 @@ impl CsvProcessor {
         mut reader: Reader<File>,
     ) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
         let mut trades = Vec::new();
-
-        // ETrade CSV format expected columns:
-        // Symbol,Quantity,Price,Date,Action,Strike,Expiration,Delta,Campaign
+        use regex::Regex;
+        let desc_re = Regex::new(r"(?P<qty>\d+) (?P<type>Put|Call) (?P<symbol>\w+) (?P<exp>\d{2}/\d{2}/\d{2}) (?P<strike>[\d.]+) @ \$(?P<price>[\d.]+)").unwrap();
+        let date_fmt = time::macros::format_description!("%m/%d/%Y %I:%M:%S %p");
         for result in reader.records() {
-            let record = result?;
-            if record.len() < 9 {
-                continue; // Skip invalid records
+            let record = match result {
+                Ok(r) if r.len() >= 8 => r,
+                _ => continue,
+            };
+            let date_str = record[0].trim_matches('"').trim();
+            let type_str = record[1].trim_matches('"').trim();
+            let description = record[4].trim_matches('"').trim();
+            let amount_str = record[7]
+                .replace("$", "")
+                .replace(",", "")
+                .replace("(", "")
+                .replace(")", "");
+            let amount: f64 = if record[7].contains('(') {
+                -amount_str.parse().unwrap_or(0.0)
+            } else {
+                amount_str.parse().unwrap_or(0.0)
+            };
+
+            // Only process option trades
+            if let Some(caps) = desc_re.captures(description) {
+                let qty: i32 = caps.name("qty").unwrap().as_str().parse().unwrap_or(0);
+                let option_type = caps.name("type").unwrap().as_str();
+                let symbol = caps.name("symbol").unwrap().as_str().to_string();
+                let exp_str = caps.name("exp").unwrap().as_str();
+                let strike: f64 = caps.name("strike").unwrap().as_str().parse().unwrap_or(0.0);
+                let _price_per_contract: f64 =
+                    caps.name("price").unwrap().as_str().parse().unwrap_or(0.0);
+
+                // Parse expiration date (MM/DD/YY)
+                let exp_fmt = time::macros::format_description!("%m/%d/%y");
+                let expiration_date = Date::parse(exp_str, &exp_fmt)
+                    .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
+                // Parse date of action
+                let date_of_action = Date::parse(date_str, &date_fmt)
+                    .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
+
+                // Map type_str and option_type to Action
+                let action = match (type_str, option_type) {
+                    ("Sold", "Put") => Action::SellPut,
+                    ("Sold", "Call") => Action::SellCall,
+                    ("Bought", "Put") => Action::BuyPut,
+                    ("Bought", "Call") => Action::BuyCall,
+                    _ => continue, // skip unknown
+                };
+
+                // Delta is not available
+                let delta = 0.0;
+                // Campaign: use symbol + year + month as a default
+                let campaign = format!("{symbol}_{expiration_date}");
+
+                let number_of_shares = qty * 100;
+                let credit = amount / (qty as f64 * 100.0); // per share
+
+                let trade = OptionTrade {
+                    id: None,
+                    symbol,
+                    campaign,
+                    action,
+                    strike,
+                    delta,
+                    expiration_date,
+                    date_of_action,
+                    number_of_shares,
+                    credit,
+                };
+                trades.push(trade);
             }
-
-            let symbol = record[0].to_string();
-            let quantity: i32 = record[1].parse().unwrap_or(0);
-            let price: f64 = record[2].parse().unwrap_or(0.0);
-            let date_str = &record[3];
-            let action_str = &record[4];
-            let strike: f64 = record[5].parse().unwrap_or(0.0);
-            let expiration_str = &record[6];
-            let delta: f64 = record[7].parse().unwrap_or(0.0);
-            let campaign = record[8].to_string();
-
-            // Parse dates
-            let date_fmt = time::macros::format_description!("[year]-[month]-[day]");
-            let date_of_action = Date::parse(date_str, &date_fmt)
-                .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
-            let expiration_date = Date::parse(expiration_str, &date_fmt)
-                .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
-
-            // Parse action
-            let action = match action_str.to_lowercase().as_str() {
-                "buy put" | "buyput" => Action::BuyPut,
-                "sell put" | "sellput" => Action::SellPut,
-                "buy call" | "buycall" => Action::BuyCall,
-                "sell call" | "sellcall" => Action::SellCall,
-                "exercised" => Action::Exercised,
-                "assigned" => Action::Assigned,
-                _ => continue, // Skip unknown actions
-            };
-
-            let trade = OptionTrade {
-                id: None,
-                symbol,
-                campaign,
-                action,
-                strike,
-                delta,
-                expiration_date,
-                date_of_action,
-                number_of_shares: quantity,
-                credit: price,
-            };
-
-            trades.push(trade);
         }
-
         Ok(trades)
     }
 
