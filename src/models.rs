@@ -2,7 +2,7 @@ use rusqlite::{Connection, Result, params};
 use serde::{Deserialize, Serialize};
 use time::Date;
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub enum Action {
     BuyPut,
     SellPut,
@@ -98,6 +98,35 @@ impl OptionTrade {
                 self.id,
             ],
         )
+    }
+
+    pub fn exists_in_db(&self, conn: &Connection) -> bool {
+        let mut stmt = conn
+            .prepare(
+                "SELECT 1 FROM option_trades WHERE \
+                symbol = ?1 AND \
+                campaign = ?2 AND \
+                action = ?3 AND \
+                strike = ?4 AND \
+                delta = ?5 AND \
+                expiration_date = ?6 AND \
+                date_of_action = ?7 AND \
+                number_of_shares = ?8 AND \
+                credit = ?9 LIMIT 1",
+            )
+            .unwrap();
+        stmt.exists(params![
+            self.symbol,
+            self.campaign,
+            format!("{:?}", self.action),
+            self.strike,
+            self.delta,
+            self.expiration_date.to_string(),
+            self.date_of_action.to_string(),
+            self.number_of_shares,
+            self.credit,
+        ])
+        .unwrap_or(false)
     }
 }
 

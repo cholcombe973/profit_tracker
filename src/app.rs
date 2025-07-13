@@ -1,3 +1,4 @@
+use crate::db;
 use crate::models::{Action, Campaign, OptionTrade};
 use ratatui::widgets::ListState;
 use rusqlite::Connection;
@@ -49,35 +50,7 @@ pub struct App {
 impl App {
     pub fn new() -> Self {
         let db_conn = Connection::open("options_trades.db").unwrap();
-        db_conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS campaigns (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL UNIQUE,
-                symbol TEXT NOT NULL,
-                created_at TEXT NOT NULL,
-                target_exit_price REAL
-            )",
-                [],
-            )
-            .unwrap();
-        db_conn
-            .execute(
-                "CREATE TABLE IF NOT EXISTS option_trades (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                symbol TEXT NOT NULL,
-                campaign TEXT NOT NULL,
-                action TEXT NOT NULL,
-                strike REAL NOT NULL,
-                delta REAL NOT NULL,
-                expiration_date TEXT NOT NULL,
-                date_of_action TEXT NOT NULL,
-                number_of_shares INTEGER NOT NULL,
-                credit REAL NOT NULL
-            )",
-                [],
-            )
-            .unwrap();
+        db::init_database(&db_conn).unwrap();
         let campaigns = Campaign::get_all(&db_conn);
         let trades = OptionTrade::get_all(&db_conn).unwrap_or_default();
         let mut form_fields: [String; 6] = Default::default();

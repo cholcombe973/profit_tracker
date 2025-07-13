@@ -1,5 +1,6 @@
 mod app;
 mod csv_processor;
+mod db;
 mod logic;
 mod models;
 mod ui;
@@ -92,33 +93,8 @@ fn import_csv(
     // Create database connection
     let db_conn = rusqlite::Connection::open("options_trades.db")?;
 
-    // Create tables if they don't exist
-    db_conn.execute(
-        "CREATE TABLE IF NOT EXISTS campaigns (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
-            symbol TEXT NOT NULL,
-            created_at TEXT NOT NULL,
-            target_exit_price REAL
-        )",
-        [],
-    )?;
-
-    db_conn.execute(
-        "CREATE TABLE IF NOT EXISTS option_trades (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            symbol TEXT NOT NULL,
-            campaign TEXT NOT NULL,
-            action TEXT NOT NULL,
-            strike REAL NOT NULL,
-            delta REAL NOT NULL,
-            expiration_date TEXT NOT NULL,
-            date_of_action TEXT NOT NULL,
-            number_of_shares INTEGER NOT NULL,
-            credit REAL NOT NULL
-        )",
-        [],
-    )?;
+    // Initialize database tables
+    db::init_database(&db_conn)?;
 
     // Create campaign if it doesn't exist
     let _campaign = Campaign::insert(&db_conn, campaign_name, symbol, None);
@@ -130,7 +106,8 @@ fn import_csv(
         trade.campaign = campaign_name.to_string();
         trade.symbol = symbol.to_string();
 
-        if trade.insert(&db_conn).is_ok() {
+        // Skip duplicates
+        if !trade.exists_in_db(&db_conn) && trade.insert(&db_conn).is_ok() {
             imported_count += 1;
         }
     }

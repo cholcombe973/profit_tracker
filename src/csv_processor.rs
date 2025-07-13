@@ -75,14 +75,16 @@ impl CsvProcessor {
         mut reader: Reader<File>,
     ) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
         let mut trades = Vec::new();
-        use regex::Regex;
-        let desc_re = Regex::new(r"(?P<qty>\d+) (?P<type>Put|Call) (?P<symbol>\w+) (?P<exp>\d{2}/\d{2}/\d{2}) (?P<strike>[\d.]+) @ \$(?P<price>[\d.]+)").unwrap();
-        let date_fmt = time::macros::format_description!("%m/%d/%Y %I:%M:%S %p");
+        let date_fmt = time::macros::format_description!(
+            "[month]/[day]/[year] [hour]:[minute]:[second] [period]"
+        );
+
         for result in reader.records() {
             let record = match result {
                 Ok(r) if r.len() >= 8 => r,
                 _ => continue,
             };
+
             let date_str = record[0].trim_matches('"').trim();
             let type_str = record[1].trim_matches('"').trim();
             let description = record[4].trim_matches('"').trim();
@@ -97,20 +99,45 @@ impl CsvProcessor {
                 amount_str.parse().unwrap_or(0.0)
             };
 
-            // Only process option trades
-            if let Some(caps) = desc_re.captures(description) {
-                let qty: i32 = caps.name("qty").unwrap().as_str().parse().unwrap_or(0);
-                let option_type = caps.name("type").unwrap().as_str();
-                let symbol = caps.name("symbol").unwrap().as_str().to_string();
-                let exp_str = caps.name("exp").unwrap().as_str();
-                let strike: f64 = caps.name("strike").unwrap().as_str().parse().unwrap_or(0.0);
-                let _price_per_contract: f64 =
-                    caps.name("price").unwrap().as_str().parse().unwrap_or(0.0);
+            // Split description on spaces to extract option trade details
+            // Format: "15 Put NVTS 07/03/25 6.500 @ $0.18"
+            let parts: Vec<&str> = description.split_whitespace().collect();
+
+            // Only process if we have enough parts and it looks like an option trade
+            if parts.len() >= 6 && (parts[1] == "Put" || parts[1] == "Call") {
+                let qty: i32 = parts[0].parse().unwrap_or(0);
+                let option_type = parts[1];
+                let symbol = parts[2].to_string();
+                let exp_str = parts[3];
+                let strike: f64 = parts[4].parse().unwrap_or(0.0);
+                // Price is after "@" symbol, so parts[6] should be the price
+                let _price_per_contract: f64 = if parts.len() > 6 && parts[5] == "@" {
+                    parts[6].trim_start_matches('$').parse().unwrap_or(0.0)
+                } else {
+                    0.0
+                };
 
                 // Parse expiration date (MM/DD/YY)
-                let exp_fmt = time::macros::format_description!("%m/%d/%y");
-                let expiration_date = Date::parse(exp_str, &exp_fmt)
-                    .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
+                let exp_parts: Vec<&str> = exp_str.split('/').collect();
+                let expiration_date = if exp_parts.len() == 3 {
+                    let month: u8 = exp_parts[0].parse().unwrap_or(1);
+                    let day: u8 = exp_parts[1].parse().unwrap_or(1);
+                    let year: u16 = exp_parts[2].parse().unwrap_or(0);
+                    let year = if year < 100 {
+                        2000 + year as i32
+                    } else {
+                        year as i32
+                    };
+                    Date::from_calendar_date(
+                        year,
+                        time::Month::try_from(month).unwrap_or(time::Month::January),
+                        day,
+                    )
+                    .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date())
+                } else {
+                    OffsetDateTime::now_local().unwrap().date()
+                };
+
                 // Parse date of action
                 let date_of_action = Date::parse(date_str, &date_fmt)
                     .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
@@ -121,13 +148,17 @@ impl CsvProcessor {
                     ("Sold", "Call") => Action::SellCall,
                     ("Bought", "Put") => Action::BuyPut,
                     ("Bought", "Call") => Action::BuyCall,
+                    ("Sold Short", "Put") => Action::SellPut,
+                    ("Sold Short", "Call") => Action::SellCall,
+                    ("Bought To Cover", "Put") => Action::BuyPut,
+                    ("Bought To Cover", "Call") => Action::BuyCall,
                     _ => continue, // skip unknown
                 };
 
                 // Delta is not available
                 let delta = 0.0;
                 // Campaign: use symbol + year + month as a default
-                let campaign = format!("{symbol}_{expiration_date}");
+                let campaign = symbol.clone();
 
                 let number_of_shares = qty * 100;
                 let credit = amount / (qty as f64 * 100.0); // per share
@@ -229,5 +260,90 @@ impl CsvProcessor {
             }
         }
         Ok(trades)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::models::Action;
+    use time::macros::date;
+
+    #[test]
+    fn test_process_etrade_csv() {
+        let processor = CsvProcessor::new(Broker::ETrade);
+        let result = processor.process_csv("tests/etrade.csv");
+
+        assert!(result.is_ok(), "Failed to process CSV: {:?}", result.err());
+
+        let trades = result.unwrap();
+        assert!(!trades.is_empty(), "No trades were parsed from the CSV");
+
+        // Test specific trades from the CSV
+        let put_trades: Vec<_> = trades
+            .iter()
+            .filter(|t| t.symbol == "NVTS" && t.action == Action::SellPut)
+            .collect();
+
+        assert!(!put_trades.is_empty(), "No NVTS Put trades found");
+
+        // Check that we have the expected trade from the first line
+        let nvts_trade = put_trades
+            .iter()
+            .find(|t| t.strike == 6.5 && t.number_of_shares == 1500)
+            .expect("Expected NVTS Put trade with strike 6.5 and 1500 shares");
+
+        assert_eq!(nvts_trade.symbol, "NVTS");
+        assert_eq!(nvts_trade.action, Action::SellPut);
+        assert_eq!(nvts_trade.strike, 6.5);
+        assert_eq!(nvts_trade.number_of_shares, 1500);
+        assert_eq!(nvts_trade.expiration_date, date!(2025 - 07 - 03));
+
+        // Test RKLB trades
+        let rklb_trades: Vec<_> = trades.iter().filter(|t| t.symbol == "RKLB").collect();
+
+        assert!(!rklb_trades.is_empty(), "No RKLB trades found");
+
+        // Test HOOD trades
+        let hood_trades: Vec<_> = trades.iter().filter(|t| t.symbol == "HOOD").collect();
+
+        assert!(!hood_trades.is_empty(), "No HOOD trades found");
+
+        // Verify that non-option entries are filtered out
+        let non_option_trades: Vec<_> = trades
+            .iter()
+            .filter(|t| t.symbol == "TSLA") // TSLA trades in CSV are stock trades, not options
+            .collect();
+
+        assert!(
+            non_option_trades.is_empty(),
+            "Stock trades should be filtered out"
+        );
+
+        println!(
+            "Successfully parsed {} option trades from E*TRADE CSV",
+            trades.len()
+        );
+
+        // Print some sample trades for debugging
+        for (i, trade) in trades.iter().take(5).enumerate() {
+            println!(
+                "Trade {}: {} {} @ ${:.2} exp: {} shares: {} credit: ${:.2}",
+                i + 1,
+                trade.symbol,
+                match trade.action {
+                    Action::BuyPut => "BuyPut",
+                    Action::SellPut => "SellPut",
+                    Action::BuyCall => "BuyCall",
+                    Action::SellCall => "SellCall",
+                    Action::Exercised => "Exercised",
+                    Action::Assigned => "Assigned",
+                },
+                trade.strike,
+                trade.expiration_date,
+                trade.number_of_shares,
+                trade.credit
+            );
+        }
     }
 }
