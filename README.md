@@ -6,6 +6,7 @@ A terminal-based options trading campaign tracker written in Rust, using a TUI (
 - Track multiple trading campaigns
 - Add, view, and edit option trades
 - Calculate campaign summary statistics (P/L, break-even, profit per week, etc.)
+- Import trades from CSV files (supports ETrade and Robinhood formats)
 - Persistent storage using SQLite (via rusqlite)
 - Intuitive keyboard navigation
 
@@ -21,6 +22,8 @@ cargo build --release
 ```
 
 ## Running
+
+### Interactive TUI Mode
 Run the application from your terminal:
 
 ```sh
@@ -28,6 +31,60 @@ cargo run --release
 ```
 
 This will launch the TUI in your terminal window.
+
+### CSV Import Mode
+Import trades from a CSV file:
+
+```sh
+cargo run --release -- import etrade --file etrade.csv --campaign "My Campaign" --symbol AAPL
+```
+
+Or for Robinhood:
+
+```sh
+cargo run --release -- import robinhood --file robinhood.csv --campaign "My Campaign" --symbol APLD
+```
+
+#### Supported Brokers
+- **ETrade**: `etrade`
+- **Robinhood**: `robinhood`
+
+#### CSV Format Examples
+
+**ETrade Format**
+
+The ETrade CSV should have the following columns:
+
+```
+Symbol,Quantity,Price,Date,Action,Strike,Expiration,Delta,Campaign
+```
+
+Example:
+```
+Symbol,Quantity,Price,Date,Action,Strike,Expiration,Delta,Campaign
+AAPL,100,2.50,2024-01-15,SellPut,150.00,2024-01-19,-0.30,AAPL_Jan2024
+AAPL,100,1.75,2024-01-20,BuyPut,145.00,2024-01-26,-0.25,AAPL_Jan2024
+TSLA,50,5.00,2024-01-10,SellCall,250.00,2024-01-12,0.45,TSLA_Jan2024
+```
+
+**Robinhood Format**
+
+The Robinhood CSV should have the following columns (as exported from Robinhood):
+
+```
+"Activity Date","Process Date","Settle Date","Instrument","Description","Trans Code","Quantity","Price","Amount"
+```
+
+Example:
+```
+"Activity Date","Process Date","Settle Date","Instrument","Description","Trans Code","Quantity","Price","Amount"
+"6/25/2025","6/25/2025","6/26/2025","APLD","APLD 6/27/2025 Call $10.00","BTC","3","$0.23","($69.13)"
+"6/25/2025","6/25/2025","6/26/2025","APLD","APLD 7/3/2025 Call $11.00","STO","3","$0.20","$59.86"
+"6/25/2025","6/25/2025","6/26/2025","NKTR","NKTR 7/18/2025 Call $40.00","STO","1","$6.20","$619.95"
+```
+
+- Only option trades (rows where the Description matches the pattern for options) will be imported.
+- The parser will extract symbol, expiration, strike, type, and action from the Description and Trans Code fields.
 
 ## Usage
 - **Campaign Select Screen**: Use `↑`/`↓` to select a campaign. Press `n` to create a new campaign. Press `Enter` to open the selected campaign. Press `q` to quit.
@@ -65,6 +122,7 @@ This will launch the TUI in your terminal window.
 ## Troubleshooting
 - If you encounter issues with the terminal display, try resizing your terminal window or running in a different terminal emulator.
 - The database file must be writable in the current directory.
+- For CSV import issues, ensure the file format matches the expected structure and the broker is correctly specified.
 
 ## License
 MIT 
