@@ -110,7 +110,11 @@ pub struct Campaign {
 
 impl Campaign {
     pub fn get_all(conn: &Connection) -> Vec<Campaign> {
-        let mut stmt = conn.prepare("SELECT name, symbol, target_exit_price FROM campaigns ORDER BY created_at DESC").unwrap();
+        let mut stmt = conn
+            .prepare(
+                "SELECT name, symbol, target_exit_price FROM campaigns ORDER BY created_at DESC",
+            )
+            .unwrap();
         let iter = stmt
             .query_map([], |row| {
                 Ok(Campaign {

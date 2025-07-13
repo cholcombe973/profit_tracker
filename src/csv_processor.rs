@@ -56,19 +56,25 @@ impl CsvProcessor {
         Self { broker }
     }
 
-    pub fn process_csv(&self, file_path: &str) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
+    pub fn process_csv(
+        &self,
+        file_path: &str,
+    ) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
         let file = File::open(file_path)?;
         let reader = Reader::from_reader(file);
-        
+
         match self.broker {
             Broker::ETrade => self.process_etrade_csv(reader),
             Broker::Robinhood => self.process_robinhood_csv(reader),
         }
     }
 
-    fn process_etrade_csv(&self, mut reader: Reader<File>) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
+    fn process_etrade_csv(
+        &self,
+        mut reader: Reader<File>,
+    ) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
         let mut trades = Vec::new();
-        
+
         // ETrade CSV format expected columns:
         // Symbol,Quantity,Price,Date,Action,Strike,Expiration,Delta,Campaign
         for result in reader.records() {
@@ -124,7 +130,10 @@ impl CsvProcessor {
         Ok(trades)
     }
 
-    fn process_robinhood_csv(&self, mut reader: Reader<File>) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
+    fn process_robinhood_csv(
+        &self,
+        mut reader: Reader<File>,
+    ) -> Result<Vec<OptionTrade>, Box<dyn std::error::Error>> {
         let mut trades = Vec::new();
         use regex::Regex;
         let option_re = Regex::new(r"(?P<symbol>\w+) (?P<exp>\d{1,2}/\d{1,2}/\d{4}) (?P<type>Call|Put) \$(?P<strike>[\d.]+)").unwrap();
@@ -140,8 +149,16 @@ impl CsvProcessor {
             let description = &record[4];
             let trans_code = &record[5];
             let quantity: i32 = record[6].replace(",", "").parse().unwrap_or(0);
-            let amount_str = record[7].replace("$", "").replace(",", "").replace("(", "").replace(")", "");
-            let amount: f64 = if record[8].contains('(') { -amount_str.parse().unwrap_or(0.0) } else { amount_str.parse().unwrap_or(0.0) };
+            let amount_str = record[7]
+                .replace("$", "")
+                .replace(",", "")
+                .replace("(", "")
+                .replace(")", "");
+            let amount: f64 = if record[8].contains('(') {
+                -amount_str.parse().unwrap_or(0.0)
+            } else {
+                amount_str.parse().unwrap_or(0.0)
+            };
 
             // Only process option trades
             if let Some(caps) = option_re.captures(description) {
@@ -151,9 +168,11 @@ impl CsvProcessor {
                 let strike: f64 = caps.name("strike").unwrap().as_str().parse().unwrap_or(0.0);
 
                 // Parse expiration date
-                let expiration_date = Date::parse(exp_str, &date_fmt).unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
+                let expiration_date = Date::parse(exp_str, &date_fmt)
+                    .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
                 // Parse activity date
-                let date_of_action = Date::parse(activity_date, &date_fmt).unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
+                let date_of_action = Date::parse(activity_date, &date_fmt)
+                    .unwrap_or_else(|_| OffsetDateTime::now_local().unwrap().date());
 
                 // Map trans_code + option_type to Action
                 let action = match (trans_code, option_type) {
@@ -162,7 +181,7 @@ impl CsvProcessor {
                     ("STO", "Call") => Action::SellCall,
                     ("STO", "Put") => Action::SellPut,
                     ("BTC", "Call") => Action::BuyCall, // closing a short call
-                    ("BTC", "Put") => Action::BuyPut,  // closing a short put
+                    ("BTC", "Put") => Action::BuyPut,   // closing a short put
                     ("STC", "Call") => Action::SellCall, // closing a long call
                     ("STC", "Put") => Action::SellPut,  // closing a long put
                     ("OASGN", _) => Action::Assigned,
@@ -191,4 +210,4 @@ impl CsvProcessor {
         }
         Ok(trades)
     }
-} 
+}
