@@ -103,24 +103,20 @@ impl OptionTrade {
 
 #[derive(Debug, Clone)]
 pub struct Campaign {
-    pub id: i32,
     pub name: String,
     pub symbol: String,
-    pub created_at: String,
     pub target_exit_price: Option<f64>,
 }
 
 impl Campaign {
     pub fn get_all(conn: &Connection) -> Vec<Campaign> {
-        let mut stmt = conn.prepare("SELECT id, name, symbol, created_at, target_exit_price FROM campaigns ORDER BY created_at DESC").unwrap();
+        let mut stmt = conn.prepare("SELECT name, symbol, target_exit_price FROM campaigns ORDER BY created_at DESC").unwrap();
         let iter = stmt
             .query_map([], |row| {
                 Ok(Campaign {
-                    id: row.get(0)?,
-                    name: row.get(1)?,
-                    symbol: row.get(2)?,
-                    created_at: row.get(3)?,
-                    target_exit_price: row.get(4)?,
+                    name: row.get(0)?,
+                    symbol: row.get(1)?,
+                    target_exit_price: row.get(2)?,
                 })
             })
             .unwrap();
@@ -138,12 +134,9 @@ impl Campaign {
             "INSERT INTO campaigns (name, symbol, created_at, target_exit_price) VALUES (?1, ?2, ?3, ?4)",
             params![name, symbol, now, target_exit_price],
         );
-        let id = conn.last_insert_rowid();
         Some(Campaign {
-            id: id as i32,
             name: name.to_string(),
             symbol: symbol.to_string(),
-            created_at: now,
             target_exit_price,
         })
     }

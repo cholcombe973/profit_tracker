@@ -2,8 +2,10 @@ mod app;
 mod logic;
 mod models;
 mod ui;
+mod csv_processor;
 
 use app::{App, AppScreen};
+use clap::{Parser, Subcommand};
 use crossterm::{
     event::{self, Event},
     execute,
@@ -13,8 +15,121 @@ use models::{Campaign, OptionTrade};
 use ratatui::prelude::*;
 use std::io::{self, Stdout};
 use time::Date;
+use csv_processor::{Broker, CsvProcessor};
+
+#[derive(Parser)]
+#[command(name = "profit_tracker")]
+#[command(about = "A terminal-based options trading campaign tracker")]
+struct Cli {
+    #[command(subcommand)]
+    command: Option<Commands>,
+}
+
+#[derive(Subcommand)]
+enum Commands {
+    /// Import trades from a CSV file
+    Import {
+        /// The broker format (etrade or robinhood)
+        broker: String,
+        
+        /// Path to the CSV file
+        #[arg(short, long)]
+        file: String,
+        
+        /// Campaign name for the imported trades
+        #[arg(short, long)]
+        campaign: String,
+        
+        /// Symbol for the imported trades
+        #[arg(short, long)]
+        symbol: String,
+    },
+}
 
 fn main() -> std::result::Result<(), Box<dyn std::error::Error>> {
+    let cli = Cli::parse();
+
+    match cli.command {
+        Some(Commands::Import { broker, file, campaign, symbol }) => {
+            // Handle CSV import
+            import_csv(&broker, &file, &campaign, &symbol)?;
+        }
+        None => {
+            // Run the normal TUI application
+            run_tui()?;
+        }
+    }
+
+    Ok(())
+}
+
+fn import_csv(broker_str: &str, file_path: &str, campaign_name: &str, symbol: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Parse broker
+    let broker: Broker = broker_str.parse()?;
+
+    // Create CSV processor
+    let processor = CsvProcessor::new(broker);
+    
+    // Process CSV file
+    let trades = processor.process_csv(file_path)?;
+    
+    if trades.is_empty() {
+        println!("No valid trades found in CSV file");
+        return Ok(());
+    }
+
+    // Create database connection
+    let db_conn = rusqlite::Connection::open("options_trades.db")?;
+    
+    // Create tables if they don't exist
+    db_conn.execute(
+        "CREATE TABLE IF NOT EXISTS campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            symbol TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            target_exit_price REAL
+        )",
+        [],
+    )?;
+    
+    db_conn.execute(
+        "CREATE TABLE IF NOT EXISTS option_trades (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            symbol TEXT NOT NULL,
+            campaign TEXT NOT NULL,
+            action TEXT NOT NULL,
+            strike REAL NOT NULL,
+            delta REAL NOT NULL,
+            expiration_date TEXT NOT NULL,
+            date_of_action TEXT NOT NULL,
+            number_of_shares INTEGER NOT NULL,
+            credit REAL NOT NULL
+        )",
+        [],
+    )?;
+
+    // Create campaign if it doesn't exist
+    let _campaign = Campaign::insert(&db_conn, campaign_name, symbol, None);
+    
+    // Import trades
+    let mut imported_count = 0;
+    for mut trade in trades {
+        // Override campaign and symbol from CLI arguments
+        trade.campaign = campaign_name.to_string();
+        trade.symbol = symbol.to_string();
+        
+        if trade.insert(&db_conn).is_ok() {
+            imported_count += 1;
+        }
+    }
+
+    println!("Successfully imported {imported_count} trades from {file_path} for campaign '{campaign_name}' ({symbol})");
+    
+    Ok(())
+}
+
+fn run_tui() -> std::result::Result<(), Box<dyn std::error::Error>> {
     // Setup terminal
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -48,8 +163,8 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
             AppScreen::EditTrade => ui::edit_trade::draw_edit_trade(f, app),
         })?;
 
-        if event::poll(std::time::Duration::from_millis(100))? {
-            if let Event::Key(key) = event::read()? {
+        if event::poll(std::time::Duration::from_millis(100))?
+            && let Event::Key(key) = event::read()? {
                 match app.screen {
                     AppScreen::CampaignSelect => match key.code {
                         crossterm::event::KeyCode::Down => {
@@ -372,7 +487,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
                     _ => {}
                 }
             }
-        }
     }
 }
 
