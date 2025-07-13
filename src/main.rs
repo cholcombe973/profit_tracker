@@ -106,8 +106,11 @@ fn import_csv(
         trade.campaign = campaign_name.to_string();
         trade.symbol = symbol.to_string();
 
-        if trade.insert(&db_conn).is_ok() {
-            imported_count += 1;
+        // Skip duplicates
+        if !trade.exists_in_db(&db_conn) {
+            if trade.insert(&db_conn).is_ok() {
+                imported_count += 1;
+            }
         }
     }
 
