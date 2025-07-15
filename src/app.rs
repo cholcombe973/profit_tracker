@@ -99,7 +99,8 @@ impl App {
     }
     pub fn reload_campaigns(&mut self) {
         self.campaigns = Campaign::get_all(&self.db_conn);
-        self.campaigns.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+        self.campaigns
+            .sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         if self.campaign_select_index >= self.campaigns.len() {
             self.campaign_select_index = self.campaigns.len().saturating_sub(1);
         }
@@ -138,22 +139,55 @@ impl App {
         let today = OffsetDateTime::now_local().unwrap().date();
         let start_of_week = today - Duration::days(today.weekday().number_from_monday() as i64 - 1);
         let end_of_week = start_of_week + Duration::days(6);
-        self.trades.iter().filter(|t| {
-            t.expiration_date >= start_of_week && t.expiration_date <= end_of_week
-        }).collect()
+        self.trades
+            .iter()
+            .filter(|t| t.expiration_date >= start_of_week && t.expiration_date <= end_of_week)
+            .collect()
     }
 
     pub fn free_cash(&self) -> f64 {
         // Net premium received (credits - debits)
-        let credits: f64 = self.trades.iter().filter(|t| matches!(t.action, crate::models::Action::SellPut | crate::models::Action::SellCall)).map(|t| t.credit * t.number_of_shares as f64).sum();
-        let debits: f64 = self.trades.iter().filter(|t| matches!(t.action, crate::models::Action::BuyPut | crate::models::Action::BuyCall | crate::models::Action::Assigned)).map(|t| t.credit * t.number_of_shares as f64).sum();
+        let credits: f64 = self
+            .trades
+            .iter()
+            .filter(|t| {
+                matches!(
+                    t.action,
+                    crate::models::Action::SellPut | crate::models::Action::SellCall
+                )
+            })
+            .map(|t| t.credit * t.number_of_shares as f64)
+            .sum();
+        let debits: f64 = self
+            .trades
+            .iter()
+            .filter(|t| {
+                matches!(
+                    t.action,
+                    crate::models::Action::BuyPut
+                        | crate::models::Action::BuyCall
+                        | crate::models::Action::Assigned
+                )
+            })
+            .map(|t| t.credit * t.number_of_shares as f64)
+            .sum();
         credits - debits
     }
 
     pub fn roic(&self) -> Option<f64> {
         // Return on Invested Capital = total P&L / total capital at risk
         // capital at risk as sum of (strike * shares) for open short puts/calls
-        let capital_at_risk: f64 = self.trades.iter().filter(|t| matches!(t.action, crate::models::Action::SellPut | crate::models::Action::SellCall)).map(|t| t.strike * t.number_of_shares as f64).sum();
+        let capital_at_risk: f64 = self
+            .trades
+            .iter()
+            .filter(|t| {
+                matches!(
+                    t.action,
+                    crate::models::Action::SellPut | crate::models::Action::SellCall
+                )
+            })
+            .map(|t| t.strike * t.number_of_shares as f64)
+            .sum();
         if capital_at_risk > 0.0 {
             Some(self.total_pnl() / capital_at_risk)
         } else {

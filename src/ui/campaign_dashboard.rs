@@ -12,8 +12,8 @@ pub fn draw_campaign_dashboard(f: &mut Frame, app: &App) {
         let block = ratatui::widgets::Block::default()
             .title("No Campaign Selected")
             .borders(ratatui::widgets::Borders::ALL);
-        let para = ratatui::widgets::Paragraph::new("No campaign is currently selected.")
-            .block(block);
+        let para =
+            ratatui::widgets::Paragraph::new("No campaign is currently selected.").block(block);
         f.render_widget(para, size);
         return;
     }

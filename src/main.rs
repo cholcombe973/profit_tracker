@@ -506,7 +506,6 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
                     crossterm::event::KeyCode::Char('q') => return Ok(()),
                     _ => {}
                 },
-             
             }
         }
     }
