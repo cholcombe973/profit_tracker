@@ -148,6 +148,7 @@ fn run_tui() -> std::result::Result<(), Box<dyn std::error::Error>> {
 fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> io::Result<()> {
     loop {
         terminal.draw(|f| match app.screen {
+            AppScreen::Summary => ui::summary::draw_summary(f, app),
             AppScreen::CampaignSelect => ui::campaign_select::draw_campaign_select(f, app),
             AppScreen::NewCampaign => ui::new_campaign::draw_new_campaign(f, app),
             AppScreen::CampaignDashboard => ui::campaign_dashboard::draw_campaign_dashboard(f, app),
@@ -180,6 +181,9 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
                     crossterm::event::KeyCode::Char('n') => {
                         app.screen = AppScreen::NewCampaign;
                     }
+                    crossterm::event::KeyCode::Esc => {
+                        app.screen = AppScreen::Summary;
+                    }
                     crossterm::event::KeyCode::Enter => {
                         if let Some(camp) = app.campaigns.get(app.campaign_select_index).cloned() {
                             app.selected_campaign = Some(camp);
@@ -191,7 +195,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
                 AppScreen::CampaignDashboard => match key.code {
                     crossterm::event::KeyCode::Esc => {
                         app.selected_campaign = None;
-                        app.screen = AppScreen::CampaignSelect;
+                        app.screen = AppScreen::Summary;
                     }
                     crossterm::event::KeyCode::Char('a') => {
                         app.screen = AppScreen::AddTrade;
@@ -203,7 +207,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
                 },
                 AppScreen::ViewTrades => match key.code {
                     crossterm::event::KeyCode::Esc => {
-                        app.screen = AppScreen::CampaignDashboard;
+                        app.screen = AppScreen::Summary;
                     }
                     crossterm::event::KeyCode::Down => {
                         if app.table_scroll + 1 < app.trades.len() {
@@ -279,7 +283,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
                         app.new_campaign_symbol.clear();
                         app.new_campaign_target_price.clear();
                         app.new_campaign_field = 0;
-                        app.screen = AppScreen::CampaignSelect;
+                        app.screen = AppScreen::Summary;
                     }
                     _ => {}
                 },
@@ -377,7 +381,7 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
                     }
                     crossterm::event::KeyCode::Esc => {
                         app.reset_form();
-                        app.screen = AppScreen::CampaignDashboard;
+                        app.screen = AppScreen::Summary;
                     }
                     _ => {}
                 },
@@ -469,11 +473,40 @@ fn run_app(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> 
                     }
                     crossterm::event::KeyCode::Esc => {
                         app.edit_trade_id = None;
-                        app.screen = AppScreen::ViewTrades;
+                        app.screen = AppScreen::Summary;
                     }
                     _ => {}
                 },
-                _ => {}
+                AppScreen::Summary => match key.code {
+                    crossterm::event::KeyCode::Char('c') => {
+                        app.screen = AppScreen::CampaignSelect;
+                    }
+                    crossterm::event::KeyCode::Char('n') => {
+                        app.screen = AppScreen::NewCampaign;
+                    }
+                    crossterm::event::KeyCode::Char('s') => {
+                        // Already on summary, do nothing
+                    }
+                    crossterm::event::KeyCode::Char('q') => return Ok(()),
+                    crossterm::event::KeyCode::Char('1') | crossterm::event::KeyCode::Char('2') => {
+                        app.screen = AppScreen::CampaignSelect;
+                    }
+                    _ => {}
+                },
+                AppScreen::MainMenu => match key.code {
+                    crossterm::event::KeyCode::Char('s') => {
+                        app.screen = AppScreen::Summary;
+                    }
+                    crossterm::event::KeyCode::Char('1') => {
+                        app.screen = AppScreen::AddTrade;
+                    }
+                    crossterm::event::KeyCode::Char('2') => {
+                        app.screen = AppScreen::ViewTrades;
+                    }
+                    crossterm::event::KeyCode::Char('q') => return Ok(()),
+                    _ => {}
+                },
+             
             }
         }
     }
@@ -488,6 +521,7 @@ fn draw_main_menu(f: &mut Frame) {
     let items = vec![
         ListItem::new("1. Add Trade"),
         ListItem::new("2. View Trades"),
+        ListItem::new("s. Summary"),
         ListItem::new("q. Quit"),
     ];
     let list = List::new(items).block(block).highlight_symbol("> ");

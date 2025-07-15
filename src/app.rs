@@ -2,9 +2,10 @@ use crate::db;
 use crate::models::{Action, Campaign, OptionTrade};
 use ratatui::widgets::ListState;
 use rusqlite::Connection;
-use time::OffsetDateTime;
+use time::{Duration, OffsetDateTime};
 
 pub enum AppScreen {
+    Summary, // Added summary screen
     #[allow(unused)]
     MainMenu,
     CampaignSelect,
@@ -51,7 +52,8 @@ impl App {
     pub fn new() -> Self {
         let db_conn = Connection::open("options_trades.db").unwrap();
         db::init_database(&db_conn).unwrap();
-        let campaigns = Campaign::get_all(&db_conn);
+        let mut campaigns = Campaign::get_all(&db_conn);
+        campaigns.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         let trades = OptionTrade::get_all(&db_conn).unwrap_or_default();
         let mut form_fields: [String; 6] = Default::default();
         // Set Date of Action (index 3) to today
@@ -59,7 +61,7 @@ impl App {
         let mut campaign_list_state = ListState::default();
         campaign_list_state.select(Some(0));
         Self {
-            screen: AppScreen::CampaignSelect,
+            screen: AppScreen::Summary, // Set summary as default
             campaigns,
             selected_campaign: None,
             campaign_select_index: 0,
@@ -97,6 +99,7 @@ impl App {
     }
     pub fn reload_campaigns(&mut self) {
         self.campaigns = Campaign::get_all(&self.db_conn);
+        self.campaigns.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
         if self.campaign_select_index >= self.campaigns.len() {
             self.campaign_select_index = self.campaigns.len().saturating_sub(1);
         }
@@ -124,5 +127,44 @@ impl App {
             Action::Assigned => 5,
         };
         self.edit_form_index = 0;
+    }
+
+    pub fn total_pnl(&self) -> f64 {
+        use crate::logic::calculate_total_premium_sold;
+        calculate_total_premium_sold(&self.trades)
+    }
+
+    pub fn trades_in_progress_this_week(&self) -> Vec<&crate::models::OptionTrade> {
+        let today = OffsetDateTime::now_local().unwrap().date();
+        let start_of_week = today - Duration::days(today.weekday().number_from_monday() as i64 - 1);
+        let end_of_week = start_of_week + Duration::days(6);
+        self.trades.iter().filter(|t| {
+            t.expiration_date >= start_of_week && t.expiration_date <= end_of_week
+        }).collect()
+    }
+
+    pub fn free_cash(&self) -> f64 {
+        // Net premium received (credits - debits)
+        let credits: f64 = self.trades.iter().filter(|t| matches!(t.action, crate::models::Action::SellPut | crate::models::Action::SellCall)).map(|t| t.credit * t.number_of_shares as f64).sum();
+        let debits: f64 = self.trades.iter().filter(|t| matches!(t.action, crate::models::Action::BuyPut | crate::models::Action::BuyCall | crate::models::Action::Assigned)).map(|t| t.credit * t.number_of_shares as f64).sum();
+        credits - debits
+    }
+
+    pub fn roic(&self) -> Option<f64> {
+        // Return on Invested Capital = total P&L / total capital at risk
+        // capital at risk as sum of (strike * shares) for open short puts/calls
+        let capital_at_risk: f64 = self.trades.iter().filter(|t| matches!(t.action, crate::models::Action::SellPut | crate::models::Action::SellCall)).map(|t| t.strike * t.number_of_shares as f64).sum();
+        if capital_at_risk > 0.0 {
+            Some(self.total_pnl() / capital_at_risk)
+        } else {
+            None
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn recent_trades(&self, n: usize) -> Vec<&crate::models::OptionTrade> {
+        let mut trades: Vec<&crate::models::OptionTrade> = self.trades.iter().collect();
+        trades.sort_by(|a, b| b.date_of_action.cmp(&a.date_of_action));
+        trades.into_iter().take(n).collect()
     }
 }

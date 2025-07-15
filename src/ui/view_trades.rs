@@ -7,6 +7,15 @@ use ratatui::{
 
 pub fn draw_view_trades(f: &mut Frame, app: &App) {
     let size = f.area();
+    if app.selected_campaign.is_none() {
+        let block = ratatui::widgets::Block::default()
+            .title("No Campaign Selected")
+            .borders(ratatui::widgets::Borders::ALL);
+        let para = ratatui::widgets::Paragraph::new("No campaign is currently selected.")
+            .block(block);
+        f.render_widget(para, size);
+        return;
+    }
     let block = Block::default()
         .title("View Trades [Up/Down: scroll, ESC: return]")
         .borders(Borders::ALL)

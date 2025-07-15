@@ -4,3 +4,4 @@ pub mod campaign_select;
 pub mod edit_trade;
 pub mod new_campaign;
 pub mod view_trades;
+pub mod summary;
